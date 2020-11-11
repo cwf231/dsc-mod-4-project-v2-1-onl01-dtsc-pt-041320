@@ -5,11 +5,22 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+
 from sklearn.metrics import (multilabel_confusion_matrix, 
-							 f1_score, 
-							 hamming_loss)
+							 f1_score, recall_score, 
+							 precision_score, hamming_loss)
 from sklearn.preprocessing import normalize
+
+import tensorflow as tf
+from tensorflow.keras import layers, models, optimizers
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+import kerastuner as kt
+
+import IPython
 import os
+import json
 
 
 def check_for_glove(default_dir='./models/', fname='glove.6B.100d.txt'):
@@ -165,6 +176,75 @@ def plot_multi_label_confusion_matrix(y_true,
             return fig
 
 
+def fit_thresholds(y_true, 
+				   y_pred_raw, 
+				   metric, 
+				   thresholds=np.arange(0.1, 1, 0.1),
+				   return_val_score_pred=False):
+	"""
+	Fit a prediction array to different thresholds.
+	The top score (based on a given metric) will be displayed.
+
+	Parameters:
+	-----------
+	y_true: array
+		Array of true labels.
+	y_pred_raw: array
+		Array of floats - prediction from model.
+	metric: string (one of ['f1_score', 'hamming_loss', 'recall', 'precision'])
+		The metric to optimize for.
+	thresholds: list or array (default: np.arange(0.1, 1, 0.1))
+		List or array of values from 0 to 1.0.
+		The required threshold to consider a given positive.
+	return_val_score_pred: bool (default=False)
+		Whether to return the values in addition to printing the report.
+	"""
+	# Set up functions dict.
+	metrics_dct = {
+		'f1_score': f1_score, 
+		'hamming_loss': hamming_loss, 
+		'recall': recall_score, 
+		'precision': precision_score
+	}
+
+	if metric not in metrics_dct:
+		raise Exception('''
+`metric` value must be one of:
+	['f1_score', 'hamming_loss', 'recall', 'precision']
+''')
+
+	# Set up top lists.
+	top_thresh_val, top_score, top_pred = (None, 0, None)
+	if metric == 'hamming_loss':
+		top_score = 1
+
+	# Iterate through thresholds and keep top score.
+	for threshold in thresholds:
+		pred = y_pred_raw.copy()
+
+		# Set predictions based on given threshold.
+		pred[pred >= threshold] = 1
+		pred[pred < threshold] = 0
+
+		# Determine whether the top score should be replaced.
+		replace = False
+		if metric == 'hamming_loss':
+			score = metrics_dct[metric](y_true, pred)
+			if score < top_score:
+				replace = True
+		else:
+			score = metrics_dct[metric](y_true, pred, average='samples')
+			if score > top_score:
+				replace = True
+
+		if replace:
+			top_thresh_val, top_score, top_pred = (threshold, score, pred)
+
+	results = f'Optimal Threshold: {top_thresh_val}. Top Score: {top_score}'
+	print(headerize(results))
+	show_scores(y_true, top_pred, header=metric.upper())
+
+
 def fit_predict_model(clf,
 					  X_train,
 					  Y_train,
@@ -176,7 +256,7 @@ def fit_predict_model(clf,
 					  plot_confusion=True):
 	"""
 	Fit a given classifier.
-	Optional to pass validation data and print f1_score and hammond loss.
+	Optional to pass validation data and print f1_score and hamming loss.
 
 	Parameters:
 	-----------
@@ -188,7 +268,7 @@ def fit_predict_model(clf,
 		y training data
 	X_val: array or None (default: None)
 		If passed with Y_val, the model will predict 
-		on the validation data and show f1_score and hammond_loss.
+		on the validation data and show f1_score and hamming_loss.
 	Y_val: array (default: None)
 		...
 	header: string (default: '')
@@ -225,10 +305,13 @@ def fit_predict_model(clf,
 def show_scores(y_true, 
 				y_pred, 
 				multi_label_conf_matrix=False,
+				recall=True,
+				precision=True,
 				header='', 
 				column_names=None):
 	"""
-	Print f1_score & hammond_loss.
+	Print f1_score & hamming_loss.
+	Optional to print sample-average recall and precision scores.
 	Optional to plot multi_label_conf_matrix for each label.
 
 	Parameters:
@@ -237,6 +320,10 @@ def show_scores(y_true,
 		True values.
 	y_pred: array
 		Predicted values.
+	recall: bool (default: True)
+		Print recall_score (average='samples')
+	precision: bool (default: True)
+		Print precision_score (average='samples')
 	multi_label_conf_matrix: bool
 		If True, plot_multi_label_confusion_matrix will be called
 		and labeled with the given column names.
@@ -249,14 +336,227 @@ def show_scores(y_true,
 		print(headerize(header))
 
 	# Scores.
-	print('F1 Score:    ', f1_score(y_true, y_pred, average='samples'))
-	print('Hamming Loss:', hamming_loss(y_true, y_pred))
+	print('F1 Score:       ', f1_score(y_true, y_pred, 
+									   average='samples'))
+	print('Hamming Loss:   ', hamming_loss(y_true, y_pred))
+	if recall:
+		print('Recall Score:   ', recall_score(y_true, y_pred, 
+											   average='samples'))
+	if precision:
+		print('Precision Score:', precision_score(y_true, y_pred, 
+												  average='samples'))
 
 	# Multi-label_confusion matrix.
 	if multi_label_conf_matrix:
 		plot_multi_label_confusion_matrix(y_true,
 										  y_pred,
 										  column_labels=column_names)
+
+
+def plot_history(history,
+				 plots,
+				 figsize=(12, 8),
+				 style=['ggplot', 'seaborn-talk']):
+	"""
+	Plot history from History object once Tensorflow model is trained.
+
+	Parameters:
+	-----------
+	history:
+		History object returned from a model.fit()
+	plots: string or list of strings
+		What is being plotted from the history object.
+		Should be keys in history.history.
+	figsize: tuple (default: (12, 8))
+		(width, height) of figure.
+	style: string or list of strings (default: ['ggplot', 'seaborn-talk'])
+		Style from matplotlib.
+	"""
+	history = history.history
+	if len(history) == 2 * len(plots):
+		val = True
+	plot1, plot2 = plots
+	with plt.style.context(style):
+		fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=figsize)
+		ax1.plot(history[plot1], label=plot1)
+		ax2.plot(history[plot2], label=plot2)
+		if val:
+			ax1.plot(history[f'val_{plot1}'], label=f'val_{plot1}')
+			ax2.plot(history[f'val_{plot2}'], label=f'val_{plot2}')
+		ax1.set(title=plot1, xlabel='Epoch', ylabel=plot1)
+		ax2.set(title=plot2, xlabel='Epoch', ylabel=plot2)
+		for ax in (ax1, ax2):
+			ax.legend()
+		fig.tight_layout()
+		plt.show()
+
+
+def tokenize_series(series_to_fit, 
+					series_to_tokenize, 
+					num_words, 
+					pad=True,
+					pad_sequences_maxlen=100,
+					return_tokenizer=True,
+					verbose=True):
+	"""
+	Fits and transforms a list of text Series on a Tokenizer.
+
+	Parameters:
+	-----------
+	series_to_fit: pandas Series (or list-like)
+		Series to fit to the Tokenizer.
+	series_to_tokenize: list of pandas Series (or list-like)
+		List of Series to tokenize.
+	num_words: int
+		The maximum number of words to keep, based
+        on word frequency. Only the most common `num_words-1` words will
+        be kept.
+	pad: bool (default: True)
+		Whether to pad requences before returning them.
+	pad_sequences_maxlen: int (default: 100)
+		Max length of the sequences when padding.
+	return_tokenizer: bool (default: True)
+		Whether to return the tokenizer as well as the tokenized Series'.
+	verbose: bool (default: True)
+		Whether to print examples of the process.
+	"""
+	def finished():
+		print(headerize('Finished'))
+
+	# Fit tokenizer to text.
+	tokenizer = Tokenizer(num_words=num_words)
+	tokenizer.fit_on_texts(list(series_to_fit))
+	if verbose:
+		print(headerize('Tokenizer Created & Fit'))
+		print('Ex:')
+		display(list(series_to_fit)[:2])
+
+	# List of tokenized messages.
+	tokenized_msg_lst = [tokenizer.texts_to_sequences(list(series))
+						 for series in series_to_tokenize]
+	if verbose:
+		print(headerize("Series' Tokenized"))
+		print('Ex:')
+		display(tokenized_msg_lst[0][:2])
+
+	# Pad sequences to regularized shape.
+	if pad:
+		padded = [pad_sequences(msg, maxlen=pad_sequences_maxlen)
+				  for msg in tokenized_msg_lst]
+		if verbose:
+			print(headerize('Tokenized'))
+			print('Ex:')
+			display(padded[0][:2])
+		if return_tokenizer:
+			finished()
+			return (tokenizer, padded)
+		else:
+			finished()
+			return padded
+	if return_tokenizer:
+		finished()
+		return (tokenizer, tokenized_msg_lst)
+	else:
+		finished()
+		return tokenized_msg_lst
+
+
+def build_model(num_words, 
+				embedding_size, 
+				gru=False, 
+				lstm=False,
+				gru_units=128,
+				lstm_units=128,
+				dense_units=50,
+				learning_rate=0.001
+				):
+	"""
+	Build and return Keras model using GRU or LSTM and a preset architecture.
+	Add one of 'gru' or 'lstm'.
+	"""
+	if gru is False and lstm is False:
+		raise Exception('Must select `gru` or `lstm`.')
+
+	model = models.Sequential()
+
+	model.add(layers.Embedding(num_words, embedding_size))
+	if gru:
+		model.add(layers.GRU(gru_units, return_sequences=True))
+	if lstm:
+		model.add(layers.LSTM(lstm_units, return_sequences=True))
+	model.add(layers.GlobalMaxPool1D())
+	model.add(layers.Dropout(0.5))
+	model.add(layers.Dense(dense_units, activation='relu'))
+	model.add(layers.Dropout(0.5))
+	model.add(layers.Dense(24, activation='sigmoid'))
+
+	model.compile(loss='binary_crossentropy',
+				  optimizer=optimizers.Adam(learning_rate=learning_rate),
+				  metrics=[tf.keras.metrics.Recall()])
+	return model
+
+
+def keras_tuner_hyperband(X_train, 
+						  y_train, 
+						  X_val, 
+						  y_val, 
+						  directory, 
+						  project_name='disaster_response'):
+	def build_tuner_model(hp):
+		model = models.Sequential()
+		model.add(layers.Embedding(20_000, 128))
+
+		# Gridsearch GRU units.
+		gru_units = hp.Int('gru_units', 
+						   min_value=64, 
+						   max_value=512, 
+						   step=32)
+		model.add(layers.GRU(units=gru_units, return_sequences=True))
+
+		model.add(layers.GlobalMaxPool1D())
+		model.add(layers.Dropout(0.5))
+
+		# Gridsearch number of dense units (Dense layer 1).
+		dense_units1 = hp.Int('dense_units1', 
+							  min_value=64, 
+							  max_value=512, 
+							  step=32)
+		model.add(layers.Dense(units=dense_units1, activation='relu'))
+		model.add(layers.Dropout(0.5))
+		model.add(layers.Dense(24, activation='sigmoid'))
+
+		# Gridsearch learning_rate
+		hp_learning_rate = hp.Choice('learning_rate', values=[0.01, 0.001, 
+															  0.0001])
+		model.compile(loss='binary_crossentropy',
+					  optimizer=optimizers.Adam(learning_rate=hp_learning_rate),
+					  metrics=['accuracy'])
+		return model
+
+	# Instantiate tuner with above function.
+	tuner = kt.Hyperband(build_tuner_model,
+						 objective='val_accuracy', 
+						 max_epochs=10,
+						 factor=3,
+						 directory=directory,
+						 project_name=project_name)
+	tuner.search(X_train, 
+				 y_train, 
+				 epochs=10, 
+				 validation_data=(X_val, y_val), 
+				 callbacks=[ClearTrainingOutput()])
+
+	print(headerize('Tuning Complete'))
+	best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
+	opt_gru = best_hps.get('gru_units')
+	opt_dense1 = best_hps.get('dense_units1')
+	learning_rate = best_hps.get('learning_rate')
+	print('Optimal Settings:')
+	print(f'\tGRU UNITS           : {opt_gru}')
+	print(f'\tDENSE UNITS (LAYER): {opt_dense1}')
+	print(f'\tLEARNING RATE       : {learning_rate}')
+
+	return tuner
 
 
 class MeanEmbedder:
@@ -662,3 +962,8 @@ class DataWarehouse:
 		if column is None:
 			column = self.target_columns
 		return self.processed_test[column].values
+
+
+class ClearTrainingOutput(tf.keras.callbacks.Callback):
+	def on_train_end(*args, **kwargs):
+		IPython.display.clear_output(wait=True)
