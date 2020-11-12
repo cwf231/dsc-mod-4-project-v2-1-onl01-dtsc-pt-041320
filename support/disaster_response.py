@@ -11,6 +11,9 @@ from sklearn.metrics import (multilabel_confusion_matrix,
 							 precision_score, hamming_loss)
 from sklearn.preprocessing import normalize
 
+from nltk.util import ngrams
+from nltk.probability import FreqDist
+
 import tensorflow as tf
 from tensorflow.keras import layers, models, optimizers
 from tensorflow.keras.preprocessing.text import Tokenizer
@@ -80,6 +83,18 @@ def plot_wordcloud(wordcloud, figsize=(12, 8)):
 	plt.imshow(wordcloud)
 	plt.axis("off")
 	plt.show()
+
+
+def top_ngrams(tokenized_words, n=2, top=10):
+	"""
+	Returns a list of tuples of the `top` ngrams of length n.
+
+	`tokenized_words` should be a Series.values of tokenized words.
+	"""
+	all_ngrams = []
+	for each in tokenized_words:
+		all_ngrams += ngrams(each, n)
+	return FreqDist(all_ngrams).most_common(top)
 
 
 def plot_multi_label_confusion_matrix(y_true, 
@@ -393,7 +408,7 @@ def plot_history(history,
 
 def tokenize_series(series_to_fit, 
 					series_to_tokenize, 
-					num_words, 
+					num_words=None, 
 					pad=True,
 					pad_sequences_maxlen=100,
 					return_tokenizer=True,
@@ -407,7 +422,7 @@ def tokenize_series(series_to_fit,
 		Series to fit to the Tokenizer.
 	series_to_tokenize: list of pandas Series (or list-like)
 		List of Series to tokenize.
-	num_words: int
+	num_words: int (default: None)
 		The maximum number of words to keep, based
         on word frequency. Only the most common `num_words-1` words will
         be kept.
@@ -481,9 +496,17 @@ def build_model(num_words,
 
 	model.add(layers.Embedding(num_words, embedding_size))
 	if gru:
-		model.add(layers.GRU(gru_units, return_sequences=True))
+		model.add(
+			layers.Bidirectional(
+				layers.GRU(gru_units, return_sequences=True)
+				)
+			)
 	if lstm:
-		model.add(layers.LSTM(lstm_units, return_sequences=True))
+		model.add(
+			layers.Bidirectional(
+				layers.LSTM(lstm_units, return_sequences=True)
+				)
+			)
 	model.add(layers.GlobalMaxPool1D())
 	model.add(layers.Dropout(0.5))
 	model.add(layers.Dense(dense_units, activation='relu'))
