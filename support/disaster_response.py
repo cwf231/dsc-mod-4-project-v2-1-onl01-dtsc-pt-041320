@@ -6,10 +6,12 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import (multilabel_confusion_matrix, 
+from sklearn.metrics import (confusion_matrix, 
 							 f1_score, recall_score, 
-							 precision_score, hamming_loss)
+							 precision_score, accuracy_score)
 from sklearn.preprocessing import normalize
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV
 
 from nltk.util import ngrams
 from nltk.probability import FreqDist
@@ -18,12 +20,14 @@ import tensorflow as tf
 from tensorflow.keras import layers, models, optimizers
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 
 import kerastuner as kt
 
 import IPython
 import os
 import json
+import joblib
 
 
 def check_for_glove(default_dir='./models/', fname='glove.6B.100d.txt'):
@@ -75,6 +79,85 @@ def headerize(string, character='*', max_len=80):
     return f'{top}\n{mid}\n{bot}'
 
 
+def plot_message_lengths_distribution(series,
+									  dist_color,
+									  mean_color,
+									  std_color, 
+									  pop_label='',
+									  n_std=3,
+									  bins='auto',
+									  figsize=(12, 6)):
+	"""
+	Plot a a population's distribution and 
+	a zoomed population around its mean side-by-side.
+
+	Parameters:
+	-----------
+	series: Pandas Series
+		Series to plot.
+	dist_color/mean_color/std_color: string
+		Color hexcode or color interpretable by matplotlib.
+	pop_label: string
+		Label to give to the population.
+		If none is given, the name of the series will be used.
+	n_std: int (default: 3)
+		Number of standard deviations to scale to.
+	bins: int, None, or 'auto' (default: 'auto')
+		Number of bins for the histogram.
+		(to be interpreted by seaborn's distplot)
+	figsize: tuple (default: (12, 6))
+		(width, height) of figure.
+	"""
+	if not pop_label:
+		pop_label = series.name
+
+	# Get mean / STD.
+	n_words_mean = series.mean()
+	n_words_std = series.std()
+
+	# Plot distributions.
+	fig, (ax1, ax2) = plt.subplots(ncols=2, sharey=True, figsize=figsize)
+
+	# Full distribution.
+	sns.distplot(series, 
+	             bins=500,
+	             label=f'{pop_label}', 
+	             ax=ax1, 
+	             color=dist_color)
+	ax1.set(title=f'{pop_label} Distribution')
+
+	# Abbreviated distribution.
+	sns.distplot(series, 
+	             bins=500,
+	             label=f'{pop_label}', 
+	             ax=ax2, 
+	             color=dist_color)
+	ax2.set(title=f'{pop_label} Distribution\nZoomed to $\pm{n_std}\sigma$')
+
+	# Zoom
+	ax2.set_xlim([
+	    n_words_mean - (n_words_std*n_std),
+	    n_words_mean + (n_words_std*n_std)
+	])
+
+	# Vlines.
+	for ax in (ax1, ax2):
+	    ax.axvline(n_words_mean, 
+	               color=mean_color, 
+	               label=f'$\mu$ = {round(n_words_mean, 3)}')
+	    ax.axvline(n_words_mean + n_words_std, 
+	               color=std_color, 
+	               label=f'$\sigma$ = {round(n_words_std, 3)}',
+	               ls=':')
+	    ax.axvline(n_words_mean - n_words_std, 
+	               color=std_color,
+	               ls=':')
+	ax1.legend()
+	ax2.legend()
+	fig.tight_layout()
+	plt.show()
+
+
 def plot_wordcloud(wordcloud, figsize=(12, 8)):
 	"""
 	Plot wordcloud image from WordCloud object.
@@ -97,105 +180,69 @@ def top_ngrams(tokenized_words, n=2, top=10):
 	return FreqDist(all_ngrams).most_common(top)
 
 
-def plot_multi_label_confusion_matrix(y_true, 
-                                      y_pred,
-                                      column_labels=None,
-                                      normalize_true=True,
-                                      dimensions_of_square=4,
-                                      cmap='Blues',
-                                      return_fig=False):
-    """
-    Create a One-vs-Rest confusion matrix 
-    for each label in a multi-label classification.
+def plot_confusion_matrix(y_true,
+                          y_pred,
+                          column_name='',
+                          figsize=(5,5),
+                          normalize_true=True,
+                          cmap='Blues',
+                          return_fig=False):
+	"""
+	Plot a confusion matrix from y_true, y_pred.
 
+	Parameters:
+	-----------
+	y_true: array
+		True labels.
+	y_pred: array
+		Predicted labels (same shape as y_true)
+	column_name: string (default: '')
+		Title of the plot.
+	figsize: tuple (default: (5, 5))
+		(width, height) of figure.
+	normalize_true: bool (default: True)
+		Whether or not the confusion matrix should be normalized
+		on the 'true' labels (ie: each row is normalized).
+	cmap: str (default: 'Blues')
+		Color-map (interpreted by Seaborn)
+	return_fig: bool (default: False)
+		Whether the function should return the figure as well as showing it.
 
-    Parameters:
-    -----------
-    y_true: array
-        True labels.
-    y_pred: array
-        Predicted labels (same shape as y_true)
-    column_labels: list or None (default: None)
-        List of label names to title each plot.
-        If ``None``, each plot will be titled with an integer.
-    normalize_true: bool (default: True)
-        Whether or not the confusion matrix should be normalized
-        on the 'true' labels (ie: each row is normalized).
-    dimensions_of_square: int (default: 5)
-        Width of each square in the subplot. 
-        (Height will be ``dimensions_of_square - 1`` to maintain ratio.)
-    cmap: str (default: 'Blues')
-        Color-map (interpreted by Seaborn)
-    return_fig: bool (default: False)
-        Whether the function should return the figure as well as showing it.
+	Returns:
+	--------
+	If return_fig is passed as True, the matplotlib figure will be returned.
+	"""
+	with plt.style.context(['ggplot', 'seaborn-talk']):
+		# Get confusion matrix.
+		matrix = confusion_matrix(y_true, y_pred)
 
-    Returns:
-    --------
-    If return_fig is passed as True, the matplotlib figure will be returned.
-    """
-    with plt.style.context(['ggplot', 'seaborn-talk']):
-    	# Define helper function.
-        round_up = lambda numerator, denominator: -(-numerator // denominator)
+		# Create figure.
+		fig, ax = plt.subplots(figsize=figsize)
 
-        # Get multi-label confusion matrix - OvR for each label.
-        multi_conf_matrix = multilabel_confusion_matrix(y_true, 
-                                                        y_pred)
-        num_labels = len(multi_conf_matrix)
+		# Plot.
+		if normalize_true:
+			matrix = normalize(matrix, norm="l1")
+			sns.heatmap(matrix, cmap=cmap, 
+						vmin=0, vmax=1 if normalize_true else None, 
+						annot=True, annot_kws={"size": 15}, 
+						ax=ax)
+			ax.set(title=column_name, 
+				   xlabel='Predicted Label', 
+				   ylabel='True Label')
 
-        # Setup figure specs.
-        MAX_ROWS = 4
-        MAX_WIDTH = 12
-        if num_labels > MAX_ROWS:
-            ncols = MAX_ROWS
-        else:
-            ncols = num_labels
-        nrows = round_up(num_labels, MAX_ROWS)
+		fig.tight_layout()
+		plt.show()
 
-        w = MAX_WIDTH if ncols * dimensions_of_square > MAX_WIDTH \
-            else ncols * dimensions_of_square
-        h = nrows * (dimensions_of_square-1)
-        figsize = (w, h)
-
-        # Create figure.
-        fig, ax_lst = plt.subplots(ncols=ncols, 
-                                   nrows=nrows,
-                                   figsize=figsize)
-        ax_lst = ax_lst.flatten()
-
-        if column_labels is None:
-            column_labels = range(num_labels)
-
-        # Plot.
-        for ax, matrix, label in zip(ax_lst, 
-        							 multi_conf_matrix, 
-        							 column_labels):
-            if normalize_true:
-                matrix = normalize(matrix, norm="l1")
-            sns.heatmap(matrix, cmap=cmap, 
-                        vmin=0, vmax=1 if normalize_true else None, 
-                        annot=True, annot_kws={"size": 15}, 
-                        ax=ax)
-            ax.set(title=label, 
-            	   xlabel='Predicted Label', 
-            	   ylabel='True Label')
-
-        # Remove unused axes in subplot.
-        ax_to_del = ax_lst[num_labels:]
-        for ax in ax_to_del:
-            fig.delaxes(ax)
-
-        fig.tight_layout()
-        plt.show()
-
-        if return_fig:
-            return fig
+		if return_fig:
+			return fig
 
 
 def fit_thresholds(y_true, 
 				   y_pred_raw, 
 				   metric, 
+				   verbose=True,
 				   thresholds=np.arange(0.1, 1, 0.1),
-				   return_val_score_pred=False):
+				   return_top_threshold=False):
 	"""
 	Fit a prediction array to different thresholds.
 	The top score (based on a given metric) will be displayed.
@@ -206,18 +253,18 @@ def fit_thresholds(y_true,
 		Array of true labels.
 	y_pred_raw: array
 		Array of floats - prediction from model.
-	metric: string (one of ['f1_score', 'hamming_loss', 'recall', 'precision'])
+	metric: string (one of ['f1_score', 'accuracy_score', 'recall', 'precision'])
 		The metric to optimize for.
 	thresholds: list or array (default: np.arange(0.1, 1, 0.1))
 		List or array of values from 0 to 1.0.
 		The required threshold to consider a given positive.
-	return_val_score_pred: bool (default=False)
-		Whether to return the values in addition to printing the report.
+	return_top_threshold: bool (default=False)
+		Whether to return the top_threshold value (float).
 	"""
 	# Set up functions dict.
 	metrics_dct = {
 		'f1_score': f1_score, 
-		'hamming_loss': hamming_loss, 
+		'accuracy_score': accuracy_score, 
 		'recall': recall_score, 
 		'precision': precision_score
 	}
@@ -225,13 +272,13 @@ def fit_thresholds(y_true,
 	if metric not in metrics_dct:
 		raise Exception('''
 `metric` value must be one of:
-	['f1_score', 'hamming_loss', 'recall', 'precision']
+	['f1_score', 'accuracy_score', 'recall', 'precision']
 ''')
 
 	# Set up top lists.
-	top_thresh_val, top_score, top_pred = (None, 0, None)
-	if metric == 'hamming_loss':
-		top_score = 1
+	top_thresh_val = None
+	top_score = 0
+	top_pred = None
 
 	# Iterate through thresholds and keep top score.
 	for threshold in thresholds:
@@ -242,22 +289,104 @@ def fit_thresholds(y_true,
 		pred[pred < threshold] = 0
 
 		# Determine whether the top score should be replaced.
-		replace = False
-		if metric == 'hamming_loss':
-			score = metrics_dct[metric](y_true, pred)
-			if score < top_score:
-				replace = True
-		else:
-			score = metrics_dct[metric](y_true, pred, average='samples')
-			if score > top_score:
-				replace = True
-
-		if replace:
-			top_thresh_val, top_score, top_pred = (threshold, score, pred)
+		score = metrics_dct[metric](y_true, pred)
+		if score > top_score:
+			top_thresh_val = threshold
+			top_score = score
+			top_pred = pred
 
 	results = f'Optimal Threshold: {top_thresh_val}. Top Score: {top_score}'
 	print(headerize(results))
-	show_scores(y_true, top_pred, header=metric.upper())
+	if verbose:
+		show_scores(y_true, top_pred, header=metric.upper())
+	if return_top_threshold:
+		return top_thresh_val
+
+
+def fit_prediction_to_threshold(y_pred, threshold=0.5):
+	"""
+	Returns a prediction which is interpreted based on a given threshold.
+	By default, this will return a binary score where each value is rounded.
+	"""
+	y = y_pred.copy()
+	y[y < threshold] = 0
+	y[y >= threshold] = 1
+	return y
+
+
+def evaluate_nn(model, 
+				model_history, 
+				X_val, 
+				y_val, 
+				X_test=None, 
+				optimize_for='f1_score', 
+				header='', 
+				column_names=None):
+	"""
+	...
+	"""
+	possible = ['f1_score', 'accuracy_score', 'recall', 'precision']
+	if optimize_for not in possible:
+		raise Exception('''
+`optimize_for` value must be one of:
+	['f1_score', 'accuracy_score', 'recall', 'precision']
+''')
+	print(headerize(header))
+	plot_history(model_history)
+
+	# Get y_pred.
+	y_pred = model.predict(X_val)
+
+	# Get optimal threshold.
+	thresh = fit_thresholds(y_val, 
+							y_pred, 
+							optimize_for, 
+							verbose=False,
+							return_top_threshold=True)
+
+	# Show scores
+	show_scores(y_true=y_val, 
+                y_pred=fit_prediction_to_threshold(y_pred, thresh),
+                conf_matrix=True,
+                header=header,
+                column_names=column_names)
+
+	if X_test is not None:
+		return fit_prediction_to_threshold(model.predict(X_test), thresh)
+
+
+def train_dump_model(name, 
+					 model, 
+					 X_train, 
+					 y_train, 
+					 X_val, 
+					 y_val, 
+					 checkpoint_path):
+	checkpoint_dir = os.path.dirname(checkpoint_path)
+
+	# Set callbacks.
+	callbacks = [
+		EarlyStopping(patience=3),
+		ModelCheckpoint(filepath=checkpoint_path, 
+						save_weights_only=True, 
+						verbose=1)
+	]
+
+	# Train model with checkpoints.
+	model_history = model.fit(X_train, 
+							  y_train, 
+							  epochs=50, 
+							  batch_size=32, 
+							  validation_data=(X_val, 
+							  				   y_val),
+							  callbacks=callbacks,
+							  verbose=2)
+	# Pickle history.
+	joblib.dump(model_history.history, 
+		checkpoint_dir+f'/{name}_history.pkl')
+
+	print(headerize(f'{name} - Complete'))
+	return model_history
 
 
 def fit_predict_model(clf,
@@ -271,7 +400,7 @@ def fit_predict_model(clf,
 					  plot_confusion=True):
 	"""
 	Fit a given classifier.
-	Optional to pass validation data and print f1_score and hamming loss.
+	Optional to pass validation data and print f1_score and accuracy score.
 
 	Parameters:
 	-----------
@@ -283,7 +412,7 @@ def fit_predict_model(clf,
 		y training data
 	X_val: array or None (default: None)
 		If passed with Y_val, the model will predict 
-		on the validation data and show f1_score and hamming_loss.
+		on the validation data and show f1_score and accuracy_score.
 	Y_val: array (default: None)
 		...
 	header: string (default: '')
@@ -294,7 +423,7 @@ def fit_predict_model(clf,
 	target_column_names: list of strings or None (default: None)
 		Column names for the multi-label confusion matrix.
 	plot_confusion: bool (default: True)
-		If True, plot_multi_label_confusion_matrix will be called
+		If True, plot_confusion_matrix will be called
 		and labeled with the given column names.
 	"""
 	# Fit.
@@ -308,7 +437,7 @@ def fit_predict_model(clf,
 	# Show scores.
 	show_scores(Y_val, 
 				Y_pred, 
-				multi_label_conf_matrix=plot_confusion,
+				conf_matrix=plot_confusion,
 				header=header,
 				column_names=target_column_names)
 
@@ -319,14 +448,14 @@ def fit_predict_model(clf,
 
 def show_scores(y_true, 
 				y_pred, 
-				multi_label_conf_matrix=False,
+				conf_matrix=False,
 				recall=True,
 				precision=True,
 				header='', 
-				column_names=None):
+				column_names=''):
 	"""
-	Print f1_score & hamming_loss.
-	Optional to print sample-average recall and precision scores.
+	Print f1_score & accuracy_score.
+	Optional to print recall and precision scores.
 	Optional to plot multi_label_conf_matrix for each label.
 
 	Parameters:
@@ -336,74 +465,140 @@ def show_scores(y_true,
 	y_pred: array
 		Predicted values.
 	recall: bool (default: True)
-		Print recall_score (average='samples')
+		Print recall_score
 	precision: bool (default: True)
-		Print precision_score (average='samples')
-	multi_label_conf_matrix: bool
-		If True, plot_multi_label_confusion_matrix will be called
+		Print precision_score
+	conf_matrix: bool
+		If True, plot_confusion_matrix will be called
 		and labeled with the given column names.
 	header: string (default: '')
 		String to headerize at the top of the report.
-	column_names: list of strings or None (default: None)
-		Column names for the multi-label confusion matrix.
+	column_names: string (default: '')
+		Column name for the multi-label confusion matrix.
 	"""
 	if header:
 		print(headerize(header))
 
 	# Scores.
-	print('F1 Score:       ', f1_score(y_true, y_pred, 
-									   average='samples'))
-	print('Hamming Loss:   ', hamming_loss(y_true, y_pred))
+	print('F1 Score:         ', f1_score(y_true, y_pred))
+	print('Accuracy Score:   ', accuracy_score(y_true, y_pred))
 	if recall:
-		print('Recall Score:   ', recall_score(y_true, y_pred, 
-											   average='samples'))
+		print('Recall Score:     ', recall_score(y_true, y_pred))
 	if precision:
-		print('Precision Score:', precision_score(y_true, y_pred, 
-												  average='samples'))
+		print('Precision Score:  ', precision_score(y_true, y_pred))
 
-	# Multi-label_confusion matrix.
-	if multi_label_conf_matrix:
-		plot_multi_label_confusion_matrix(y_true,
-										  y_pred,
-										  column_labels=column_names)
+	# Confusion matrix.
+	if conf_matrix:
+		plot_confusion_matrix(y_true,
+							  y_pred,
+							  column_name=column_names)
 
 
-def plot_history(history,
-				 plots,
-				 figsize=(12, 8),
-				 style=['ggplot', 'seaborn-talk']):
+def make_scores_df(index_lst=['F1', 'Accuracy', 'Recall', 'Precision']):
 	"""
-	Plot history from History object once Tensorflow model is trained.
+	Create empty dataframe to store model results.
+	"""
+	df = pd.DataFrame(index=index_lst)
+	print(headerize('DataFrame Created Sucessfully'))
+	return df
+
+
+def get_scores(y_true, y_pred):
+	"""
+	Returns a list of:
+		[`f1_score`, `accuracy_score`, `recall_score`, `precision_score`]
+	"""
+	metrics_lst = [
+		f1_score(y_true, y_pred), 
+		accuracy_score(y_true, y_pred), 
+		recall_score(y_true, y_pred), 
+		precision_score(y_true, y_pred)
+	]
+	return metrics_lst
+
+
+def plot_history(history, style=['ggplot', 'seaborn-talk']):
+	"""
+	Plot history from History object (or history dict) 
+	once Tensorflow model is trained.
 
 	Parameters:
 	-----------
 	history:
 		History object returned from a model.fit()
-	plots: string or list of strings
-		What is being plotted from the history object.
-		Should be keys in history.history.
-	figsize: tuple (default: (12, 8))
-		(width, height) of figure.
 	style: string or list of strings (default: ['ggplot', 'seaborn-talk'])
 		Style from matplotlib.
 	"""
-	history = history.history
-	if len(history) == 2 * len(plots):
-		val = True
-	plot1, plot2 = plots
+	if type(history) != dict:
+		history = history.history
+
+	metrics_lst = [m for m in history.keys() if not m.startswith('val')]
+	N = len(metrics_lst)
 	with plt.style.context(style):
-		fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=figsize)
-		ax1.plot(history[plot1], label=plot1)
-		ax2.plot(history[plot2], label=plot2)
-		if val:
-			ax1.plot(history[f'val_{plot1}'], label=f'val_{plot1}')
-			ax2.plot(history[f'val_{plot2}'], label=f'val_{plot2}')
-		ax1.set(title=plot1, xlabel='Epoch', ylabel=plot1)
-		ax2.set(title=plot2, xlabel='Epoch', ylabel=plot2)
-		for ax in (ax1, ax2):
+		fig, ax_lst = plt.subplots(nrows=N, figsize=(8, 4*(N)))
+		for metric, ax in zip(metrics_lst, ax_lst.flatten()):
+			val_m = f'val_{metric}'
+			ax.plot(history[metric], label=metric)
+			ax.plot(history[val_m], label=val_m)
+			ax.set(title=metric.title(), xlabel='Epoch', ylabel=metric.title())
 			ax.legend()
 		fig.tight_layout()
 		plt.show()
+
+
+def plot_top_ngrams(N,
+					pos_data,
+					neg_data,
+					pos_color,
+					neg_color,
+					pos_label='',
+					neg_label='',
+					header=''):
+	"""
+	Comparitively plot most common ngrams.
+
+	Parameters:
+	-----------
+	N: int (must be greater than 1)
+		Length of max ngram that is created. 
+		Ngrams of range(1, N+1) will be created.
+	pos_data / neg_data: list of tokenized data.
+		Data to create ngrams.
+		One for positive, one for negative.
+	pos_color / neg_color: string
+		Color to be interpreted by seaborn.
+	pos_label / neg_label: string (default: '')
+		Title to give to the plot column.
+	header: string (default: '')
+		Header to print at the start.
+	"""
+	print(headerize(header))
+
+	# Plot barcharts.
+	fig, ax_lst = plt.subplots(nrows=N, ncols=2, figsize=(16, 12))
+	for (ax1, ax2), i in zip(ax_lst, range(1, N+1)):
+	    if i == 1:
+	        ax1.set(title=neg_label)
+	        ax2.set(title=pos_label)
+	    xneg = []
+	    xpos = []
+	    yneg = []
+	    ypos = []
+	    
+	    # Append top ngrams for each.
+	    for t, count in top_ngrams(neg_data, i, top=5):
+	        xneg.append(count)
+	        yneg.append(' '.join(t))
+	    for t, count in top_ngrams(pos_data, i, top=5):
+	        xpos.append(count)
+	        ypos.append(' '.join(t))
+	        
+	    # Plot
+	    sns.barplot(x=xneg, y=yneg, orient='h', color=neg_color, ax=ax1)
+	    sns.barplot(x=xpos, y=ypos, orient='h', color=pos_color, ax=ax2)
+	    
+	fig.tight_layout()
+	plt.show()
 
 
 def tokenize_series(series_to_fit, 
@@ -411,10 +606,10 @@ def tokenize_series(series_to_fit,
 					num_words=None, 
 					pad=True,
 					pad_sequences_maxlen=100,
-					return_tokenizer=True,
 					verbose=True):
 	"""
 	Fits and transforms a list of text Series on a Tokenizer.
+	Returns a fit tokenizer object and the transformed series'.
 
 	Parameters:
 	-----------
@@ -430,8 +625,6 @@ def tokenize_series(series_to_fit,
 		Whether to pad requences before returning them.
 	pad_sequences_maxlen: int (default: 100)
 		Max length of the sequences when padding.
-	return_tokenizer: bool (default: True)
-		Whether to return the tokenizer as well as the tokenized Series'.
 	verbose: bool (default: True)
 		Whether to print examples of the process.
 	"""
@@ -462,18 +655,111 @@ def tokenize_series(series_to_fit,
 			print(headerize('Tokenized'))
 			print('Ex:')
 			display(padded[0][:2])
-		if return_tokenizer:
-			finished()
-			return (tokenizer, padded)
-		else:
-			finished()
-			return padded
-	if return_tokenizer:
 		finished()
-		return (tokenizer, tokenized_msg_lst)
-	else:
-		finished()
-		return tokenized_msg_lst
+		return (tokenizer, padded)
+	finished()
+	return (tokenizer, tokenized_msg_lst)
+
+
+def make_embedding_matrix(word_embedder, word_to_index):
+	"""
+	Create pretrained embedding matrix with dimensions:
+		(vocab_len, word_embedder_dimensions)
+	Assigns the word embeddings to the appropriate rows associated with 
+	the word_to_index.
+
+	Parameters:
+	-----------
+	word_embedder: dict
+		Dictionary with format {word: {array}}.
+	word_to_index: dict
+		Dictionary with format: {word: idx}.
+
+	Returns: 
+		(vocab_len, 
+		num_dimensions, 
+		matrix)
+
+	**matrix: shape (len(word_to_index) + 1, len({array}))**
+	"""
+	vocab_len = len(word_to_index) + 1
+	num_dimensions = next(iter(word_embedder.values())).shape[0]
+
+	matrix = np.zeros((vocab_len, num_dimensions))
+	for word, idx in word_to_index.items():
+		if word not in word_embedder:
+			continue
+		matrix[idx, :] = word_embedder[word]
+
+	return vocab_len, num_dimensions, matrix
+
+def gridsearch_classifiers(classifiers,
+						   mean_word_embedder,
+						   directory,
+						   X_train,
+						   Y_train,
+						   suffix_label='',
+						   cv=3,
+						   njobs=-2):
+	"""
+	GridSearch a list of (classifier_steps, parameters).
+	Saves a pickle of the best estimator to the given directory.
+	Returns a list of best estimators.
+
+	Parameters:
+	-----------
+	classifiers: list
+		List of tuples in the following format:
+			(clf_step, clf_params)
+		The `clf_step` should be a step to input to a Pipeline.
+			(ex: ('name', clf))
+		The `clf_params` should be a dictionary of parameters to try
+		through a Pipeline (the key should be '{name}__{parameter}')
+		For example:
+			>>> classifiers = [
+			>>>		(('LOGREG', LogisticRegression()), 
+			>>>		 {'LOGREG__C': [0.1, 1., 10.]}),
+			>>>		...
+			>>>]
+	mean_word_embedder: MeanEmbedder Object
+		(Instantiated from this file: dis.MeanEmbedder())
+	directory: string
+		Directory path where to save the models.
+	X_train: array
+		Data to train the GridSearch on.
+	Y_train: array
+		Data to train the GridSearch on.
+	cv: int (default: 3)
+		Number of CrossFolds used for validation.
+	njobs: int (default: -2)
+		Number of processors to use. 
+		If njobs is negative, it will use all but njobs available processors.
+	"""
+	if not directory.endswith('/'):
+		directory += '/'
+
+	save_lst = []
+	# Fit rfc, svc, lr models through a GridSearch.
+	for clf_step, clf_params in classifiers:
+		name = clf_step[0]
+
+		# Build Pipeline & Gridsearch.
+		steps = [('MeanWordEmbedder', mean_word_embedder), clf_step]
+		pipe = Pipeline(steps=steps, verbose=True)
+		clf_grid = GridSearchCV(pipe, 
+								clf_params, 
+								cv=cv, 
+								n_jobs=njobs, 
+								verbose=True)
+
+		# Fit & save.
+		clf_grid.fit(X_train, Y_train)
+		save_lst.append(
+			(name, clf_grid.best_estimator_)
+		)
+		joblib.dump(clf_grid.best_estimator_, 
+					f'{directory}{name}{suffix_label}.pkl')
+	return save_lst
 
 
 def build_model(num_words, 
@@ -585,31 +871,59 @@ def keras_tuner_hyperband(X_train,
 class MeanEmbedder:
 	"""
 	Mean Word Embedder.
-	Initiates with a GloVe dictionary.
+	Initiates with a word vector object.
+	Can pass in a dictionary or Word2VecKeyedVectors object
 
 	Transforms an array of words into a mean vector.
 	"""
-	def __init__(self, glove, verbose=False):
-		self.glove = glove
-		self.dim = len(self.glove[list(self.glove.keys())[0]])
+	def __init__(self, word_vectors, verbose=False):
+		self.word_vectors = word_vectors
+
+		if type(word_vectors) == dict:
+			self.dim = len(word_vectors[list(word_vectors.keys())[0]])
+			self.w2v = False
+			if verbose:
+				print('Loaded from dictionary.')
+		elif hasattr(word_vectors, 'vocab'):
+			self.dim = len(word_vectors[list(word_vectors.vocab)[0]])
+			self.w2v = True
+			if verbose:
+				print('Loaded from W2V.')
+		else:
+			raise Exception('`word_vectors` type not recognized.')
+
 		if verbose:
 			print(headerize('Success'))
-			print(f'Glove model loaded. Dimensions: {self.dim}')
+			print(f'Embedding model loaded. Dimensions: {self.dim}')
 
 	def __repr__(self):
-		return 'MeanEmbedder()'
+		if self.w2v:
+			return 'MeanEmbedder(W2V)'
+		else:
+			return 'MeanEmbedder(GloVe)'
 
 	# Create fit method to cooperate with sklearn Pipelines.
 	def fit(self, X, y):
 		return self
 
 	def transform(self, X):
-		return np.array([
-			np.mean(
-				[self.glove[w] for w in words if w in self.glove]
-				or [np.zeros(self.dim)], axis=0) 
-			for words in X
-			])
+		if self.w2v:
+			return np.array([
+				np.mean(
+					[self.word_vectors[w] for w in words 
+					 if w in self.word_vectors.vocab]
+					or [np.zeros(self.dim)], axis=0) 
+				for words in X
+				])
+		else:
+			return np.array([
+				np.mean(
+					[self.word_vectors[w] for w in words 
+					 if w in self.word_vectors]
+					or [np.zeros(self.dim)], axis=0) 
+				for words in X
+				])
+
 
 
 class DataWarehouse:
@@ -732,128 +1046,58 @@ class DataWarehouse:
 								dataset, 
 								positive_color,
 								negative_color,
-								normalize=False,
-								figsize=(12, 12)):
+								negative_label,
+								positive_label,
+								title='',
+								figsize=(8, 6)):
 		"""
-		Plot a stacked horizontal bar chart 
-		showing the distribution of class labels.
+		Plot a donut plot showing the distribution of class labels.
 
 		Parameters:
 		-----------
-		dataset: string (one of ['train', 'val', 'test', 'train_val'])
-			Dataset to pass. The internal processed 
-				corresponding DataFrame will be used.
-			If ``train_val`` is passed, a figure 
-				with both columns will be shown.
+		dataset: string (one of ['train', 'val', 'test'])
+			Dataset to pass. 
+			The internal processed corresponding DataFrame will be used.
 		positive_color: string
 			Bar color for positive values.
 		negative_color: string
 			Bar color for negative values.
-		normalize: bool (default: False)
-			Whether the bars should should parts of the total
-			or percentage of 1.0.
-		figsize: tuple (default: (12, 12)
+		negative_label: string
+			Label for negative values on the donut.
+		positive_label: string
+			Label for positive values on the donut.
+		title: string (default: '')
+			Header for the top of the printout.
+		figsize: tuple (default: (8, 6))
 			Size in inches for the plot.
 		"""
-		if dataset != 'train_val':
-			data_map = {
-				'train': self.processed_train[self.target_columns],
-				'val': self.processed_val[self.target_columns],
-				'test': self.processed_test[self.target_columns]
-			}
-			df = data_map[dataset].copy()
+		if type(self.target_columns) == list and len(self.target_columns) > 1:
+			raise ValueError('`predictive_columns` must be a single value.')
 
-			# Set up values.
-			num_positive = df.sum()
-			num_positive.sort_values(inplace=True)
-			if normalize:
-				num_positive /= len(df)
-				num_negative = (1 - num_positive) * -1
-			else:
-				num_negative = (len(df) - num_positive) * -1
-			labels = num_positive.index
+		print(headerize(title))
+		trgt_dct = {
+			'train': self.processed_train, 
+			'val': self.processed_val, 
+			'test': self.processed_test
+		}
 
-			# Plot values.
-			fig, ax = plt.subplots(figsize=figsize)
-			ax.barh(labels, num_negative, 
-					label='Does Not Have Label', 
-					color=negative_color)
-			ax.barh(labels, num_positive, 
-					label='Has Label', 
-					color=positive_color, 
-					left=0)
-			ax.set(title='Distribution of Labels',
-			       ylabel='Label',
-			       xlabel='Count')
-			ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05),
-			          fancybox=True, shadow=True, ncol=5)
-			if normalize:
-				ax.set_xlim(-1, 1)
-			else:
-				ax.set_xlim(len(df)*-1, len(df))
-			fig.tight_layout()
-			plt.show()
+		if type(self.target_columns) == list:
+			col = self.target_columns[0]
 		else:
-			df1 = self.processed_train[self.target_columns]
-			df2 = self.processed_val[self.target_columns]
+			col = self.target_columns
+		trgt = trgt_dct[dataset][col]
 
-			# Set up values.
-			num_positive1 = df1.sum()
-			num_positive1.sort_values(inplace=True)
-			if normalize:
-				num_positive1 /= len(df1)
-				num_negative1 = (1 - num_positive1) * -1
-			else:
-				num_negative1 = (len(df1) - num_positive1) * -1
-			labels = num_positive1.index
+		# Plot donut chart.
+		fig, ax = plt.subplots(figsize=figsize)
+		ax.pie(trgt.value_counts(), 
+		       colors=[negative_color, positive_color],
+		       labels=[negative_label, positive_label],
+		       autopct=lambda p: '{:.2f}%  ({:,.0f})'.format(p, p*len(trgt)/100),
+		       textprops={'fontsize': 18})
+		ax.add_artist(plt.Circle((0,0), 0.5, color='white'))
+		ax.set(title=f'{col.title()} Distribution')
+		fig.tight_layout()
 
-			num_positive2 = df2.sum()[labels]
-			if normalize:
-				num_positive2 /= len(df2)
-				num_negative2 = (1 - num_positive2) * -1
-			else:
-				num_negative2 = (len(df2) - num_positive2) * -1
-
-			# Plot values.
-			fig, (ax1, ax2) = plt.subplots(ncols=2, sharey=True, figsize=figsize)
-
-			# ax1
-			ax1.barh(labels, num_negative1, 
-					 label='Does Not Have Label', 
-					 color=negative_color)
-			ax1.barh(labels, num_positive1, 
-					 label='Has Label', 
-					 color=positive_color, 
-					 left=0)
-			ax1.set(title='Distribution of Labels - Train',
-			        ylabel='Label',
-			        xlabel='Count')
-			ax1.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05),
-			           fancybox=True, shadow=True, ncol=5)
-
-			# ax2
-			ax2.barh(labels, num_negative2, 
-					 label='Does Not Have Label', 
-					 color=negative_color)
-			ax2.barh(labels, num_positive2, 
-					 label='Has Label', 
-					 color=positive_color, 
-					 left=0)
-			ax2.set(title='Distribution of Labels - Validation',
-			        ylabel='Label',
-			        xlabel='Count')
-			ax2.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05),
-			           fancybox=True, shadow=True, ncol=5)
-
-			if normalize:
-				ax1.set_xlim(-1, 1)
-				ax2.set_xlim(-1, 1)
-			else:
-				ax1.set_xlim(len(df1)*-1, len(df1))
-				ax2.set_xlim(len(df2)*-1, len(df2))
-
-			fig.tight_layout()
-			plt.show()
 
 	def drop_column(self, column):
 		"""
