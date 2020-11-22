@@ -4,7 +4,7 @@ This repo follows the processing and modeling behind a text-analysis of disaster
 
 https://appen.com/datasets/combined-disaster-response-data/
 
-<img src='./images/wordcloud.png' align='left'>
+<img src='./images/wordcloud.png'>
 
 **Outline**
 - Data Processing
@@ -59,7 +59,7 @@ Additionally, there is a `disaster_response.py` file in this repo which is used 
    - 72.60% of `aid-related` predictions were correct.
    - 79.49% overall accuracy.
   
-<img src='./images/results.png' align='left'>
+<img src='./images/results.png'>
 
 - Overall, **RNN_glove** (the RNN accompanied by the GloVe weights) performed clearly best overall.
  - On the test set:
@@ -122,7 +122,7 @@ Processed Test Data:
 #### Remove stop-words and punctuation
 ### Target
 #### Set `aid-related` to target column.
-<img src='./images/aid_related_distribution.png' align='left'>
+<img src='./images/aid_related_distribution.png'>
 
 ```
 ********************************************************************************
@@ -185,8 +185,8 @@ Most Similar Words:
 
 ### EDA & Processing (continued)
 #### Message lengths
-<img src='./images/message_length_distribution.png' align='left'>
-<img src='./images/msg_count.png' align='left'>
+<img src='./images/message_length_distribution.png'>
+<img src='./images/msg_count.png'>
 
 #### Drop training data with fewer than 4 words.
 <img src='./images/most_common_words.png' align='left'>
