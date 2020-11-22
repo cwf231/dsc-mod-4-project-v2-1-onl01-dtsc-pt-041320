@@ -60,7 +60,7 @@ Additionally, there is a `disaster_response.py` file in this repo which is used 
    - 79.49% overall accuracy.
   
   
-<img src='./images/results.png'>
+<img src='./images/results.PNG'>
 
 - Overall, **RNN_glove** (the RNN accompanied by the GloVe weights) performed clearly best overall.
  - On the test set:
@@ -190,8 +190,8 @@ Most Similar Words:
 <img src='./images/msg_count.png'>
 
 #### Drop training data with fewer than 4 words.
-<img src='./images/most_common_words.png' align='left'>
-<img src='./images/most_common_phrases.png' align='left'>
+<img src='./images/most_common_words.png'>
+<img src='./images/most_common_phrases.png'>
 
 ## Modeling
 
