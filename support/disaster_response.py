@@ -6,7 +6,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import (confusion_matrix, 
+from sklearn.metrics import (confusion_matrix, classification_report,
 							 f1_score, recall_score, 
 							 precision_score, accuracy_score)
 from sklearn.preprocessing import normalize
@@ -67,7 +67,7 @@ def headerize(string, character='*', max_len=80):
         else:
             right = left + 1
         
-        top = character * 80
+        top = character * max_len
         mid = f'{character}{" " * left}{string}{" " * right}{character}'
         bot = top
     else:
@@ -163,7 +163,7 @@ def plot_wordcloud(wordcloud, figsize=(12, 8)):
 	Plot wordcloud image from WordCloud object.
 	"""
 	plt.figure(figsize=figsize)
-	plt.imshow(wordcloud)
+	plt.imshow(wordcloud, interpolation="bilinear")
 	plt.axis("off")
 	plt.show()
 
@@ -337,12 +337,13 @@ def evaluate_nn(model,
 	# Get y_pred.
 	y_pred = model.predict(X_val)
 
-	# Get optimal threshold.
-	thresh = fit_thresholds(y_val, 
-							y_pred, 
-							optimize_for, 
-							verbose=False,
-							return_top_threshold=True)
+	# # Get optimal threshold.
+	# thresh = fit_thresholds(y_val, 
+	# 						y_pred, 
+	# 						optimize_for, 
+	# 						verbose=False,
+	# 						return_top_threshold=True)
+	thresh = 0.5
 
 	# Show scores
 	show_scores(y_true=y_val, 
@@ -361,15 +362,16 @@ def train_dump_model(name,
 					 y_train, 
 					 X_val, 
 					 y_val, 
-					 checkpoint_path):
-	checkpoint_dir = os.path.dirname(checkpoint_path)
+					 f_path,
+					 class_weight=None):
+	f_dir = os.path.dirname(f_path)
 
 	# Set callbacks.
 	callbacks = [
 		EarlyStopping(patience=3),
-		ModelCheckpoint(filepath=checkpoint_path, 
-						save_weights_only=True, 
-						verbose=1)
+		# ModelCheckpoint(filepath=checkpoint_path, 
+		# 				save_weights_only=True, 
+		# 				verbose=1)
 	]
 
 	# Train model with checkpoints.
@@ -377,13 +379,13 @@ def train_dump_model(name,
 							  y_train, 
 							  epochs=50, 
 							  batch_size=32, 
-							  validation_data=(X_val, 
-							  				   y_val),
+							  validation_data=(X_val, y_val),
 							  callbacks=callbacks,
+							  class_weight=class_weight,
 							  verbose=2)
-	# Pickle history.
-	joblib.dump(model_history.history, 
-		checkpoint_dir+f'/{name}_history.pkl')
+	# Save.
+	model.save(f_path)
+	joblib.dump(model_history.history, f_dir+f'/{name}_history.pkl')
 
 	print(headerize(f'{name} - Complete'))
 	return model_history
@@ -395,6 +397,7 @@ def fit_predict_model(clf,
 					  X_val=None,
 					  Y_val=None,
 					  header='',
+					  target_names=None,
 					  return_pred=False,
 					  target_column_names=None,
 					  plot_confusion=True):
@@ -418,6 +421,9 @@ def fit_predict_model(clf,
 	header: string (default: '')
 		String to headerize at the top of the report 
 		(if validation data is given).
+	target_names: list or None (default: None)
+		List of strings of the labels in order. 
+		(eg [`0`, `1`] --> ['class_negative', 'class_positive'])
 	return_pred: bool (default: False)
 		Decide whether to return the prediction on the given X_val.
 	target_column_names: list of strings or None (default: None)
@@ -439,6 +445,7 @@ def fit_predict_model(clf,
 				Y_pred, 
 				conf_matrix=plot_confusion,
 				header=header,
+				target_names=target_names,
 				column_names=target_column_names)
 
 	# Return prediction.
@@ -449,8 +456,7 @@ def fit_predict_model(clf,
 def show_scores(y_true, 
 				y_pred, 
 				conf_matrix=False,
-				recall=True,
-				precision=True,
+				target_names=None,
 				header='', 
 				column_names=''):
 	"""
@@ -464,13 +470,11 @@ def show_scores(y_true,
 		True values.
 	y_pred: array
 		Predicted values.
-	recall: bool (default: True)
-		Print recall_score
-	precision: bool (default: True)
-		Print precision_score
 	conf_matrix: bool
 		If True, plot_confusion_matrix will be called
 		and labeled with the given column names.
+	target_names: list of strings or None (default: None)
+		Names of the targets in order of the labels (ie: [0, 1])
 	header: string (default: '')
 		String to headerize at the top of the report.
 	column_names: string (default: '')
@@ -479,13 +483,20 @@ def show_scores(y_true,
 	if header:
 		print(headerize(header))
 
+	dct = classification_report(y_true, y_pred, 
+								target_names=target_names,
+								output_dict=True)
+	if target_names is None:
+		target_names = [str(x) for x in sorted(list(set(y_true)))]
+
 	# Scores.
-	print('F1 Score:         ', f1_score(y_true, y_pred))
-	print('Accuracy Score:   ', accuracy_score(y_true, y_pred))
-	if recall:
-		print('Recall Score:     ', recall_score(y_true, y_pred))
-	if precision:
-		print('Precision Score:  ', precision_score(y_true, y_pred))
+	target_dct = {target: dct[target] for target in target_names}
+	print(pd.DataFrame.from_dict(target_dct, orient='index')) # scores per target.
+	print()
+	print(pd.DataFrame([dct['accuracy']], index=[' '], columns=['accuracy'])) # accuracy
+	print()
+	avg_dct = {a: dct[a] for a in dct.keys() if 'avg' in a}
+	print(pd.DataFrame.from_dict(avg_dct, orient='index')) # micro / micro avg.
 
 	# Confusion matrix.
 	if conf_matrix:
@@ -596,6 +607,8 @@ def plot_top_ngrams(N,
 	    # Plot
 	    sns.barplot(x=xneg, y=yneg, orient='h', color=neg_color, ax=ax1)
 	    sns.barplot(x=xpos, y=ypos, orient='h', color=pos_color, ax=ax2)
+	    ax1.set(xlabel='Frequency')
+	    ax2.set(xlabel='Frequency')
 	    
 	fig.tight_layout()
 	plt.show()
@@ -1013,6 +1026,24 @@ class DataWarehouse:
 			sucess_msg = 'Data loaded sucessfully.'
 			print(headerize(sucess_msg))
 			self.show_data_shapes(show_processed=False, show_column_desc=True)
+
+	def __repr__(self):
+		self.show_thyself()
+		return ''
+
+	def __str__(self):
+		return 'DataWarehouse()'
+
+	def show_thyself(self):
+		print(headerize('DataWarehouse'))
+		self.show_data_shapes()
+		print(headerize('Raw Data'))
+		self.show_data_shapes(show_processed=False, show_column_desc=True)
+		print(headerize('Processed Data'))
+		self.show_data_shapes(show_processed=True, show_column_desc=True)
+		print(headerize('Columns'))
+		print(list(self.processed_train.columns))
+		self.show_column_split()
 
 	def show_column_split(self):
 		"""

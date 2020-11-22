@@ -1,3 +1,4 @@
 .DS_store
 .ipynb_checkpoints
-glove.6B.100d
+/models/glove.6B.100d.txt
+README.ipynb
