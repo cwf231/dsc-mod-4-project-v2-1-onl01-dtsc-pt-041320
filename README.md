@@ -59,6 +59,7 @@ Additionally, there is a `disaster_response.py` file in this repo which is used 
    - 72.60% of `aid-related` predictions were correct.
    - 79.49% overall accuracy.
   
+  
 <img src='./images/results.png'>
 
 - Overall, **RNN_glove** (the RNN accompanied by the GloVe weights) performed clearly best overall.
