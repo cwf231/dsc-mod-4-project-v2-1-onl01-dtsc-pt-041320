@@ -1,0 +1,10 @@
+matplotlib==3.2.2
+pandas==0.25.1
+joblib==0.13.2
+nltk==3.4.5
+streamlit==0.71.0
+keras_tuner==1.0.1
+numpy==1.16.5
+seaborn==0.9.0
+ipython==7.19.0
+Pillow==8.0.1
