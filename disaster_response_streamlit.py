@@ -59,17 +59,17 @@ def inference(text, tokenizer, model):
 
 def main():
 	st.title('Disaster Response - Message Identification')
-	st.write('This app is designed to show predictions on whether a given text is likely to be `aid-related` or not. A model like this can be used to quickly label a high volume of texts during times when it is important to find messages that are aid-related.')
+	st.write('This app is designed to show predictions on whether a given text is likely to be `aid-related` or not. A model like this can be used to quickly label a high volume of texts during times when it is important to find messages that are labeled as important.')
 	st.write('The model being used is a Recurrent Neural Network build with Tensorflow. It uses GloVe weight embeddings and trained for only 5 epochs.')
 	st.write('On unseen text data, 81.88% of `aid-related` messages were found, 78.63% of `aid-related` predictions were correct. The model scored an 81.89% overall accuracy.')
 	st.image(Image.open('./images/neuron.png'), use_column_width=True)
-	st.write('Please fill in some text into the left sidebar, then press the button below.')
+	st.write('Please fill in some text into the left sidebar, then press the button below. (The messages can be any length)')
 
 	text = st.sidebar.text_input('Message:', 'We are out of food and water.')
 	st.write('Current text:')
 	st.write('   ', text)
 
-	if (st.button('Click here.')):
+	if (st.button('Click here for results.')):
 		tokenizer, model = load(TOKENIZER_PATH, MODEL_PATH)
 		result = inference(text, tokenizer, model)
 		st.write(result)
