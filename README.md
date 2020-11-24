@@ -6,6 +6,19 @@ https://appen.com/datasets/combined-disaster-response-data/
 
 <img src='./images/wordcloud.png'>
 
+# Trying Out the Model
+
+## Try out the model here!
+> https://share.streamlit.io/cwf231/dsc-mod-4-project-v2-1-onl01-dtsc-pt-041320/disaster_response_streamlit.py
+
+## Or...
+For an interactive usage of a simple `streamlit` app, you can clone the repo and from the terminal, run the following:
+
+```console
+pip install streamlit
+streamlit run disaster_response_streamlit.py
+```
+
 **Outline**
 - Data Processing
  - Understanding
@@ -70,15 +83,6 @@ Additionally, there is a `disaster_response.py` file in this repo which is used 
 - **SVC_glove** (the SVC using Mean Word Embeddings and the GloVe model) performed exceptionally well, performing just below the **RNN_glove** in f1-score (better precision, but worse recall).
 - The GloVe model lead to better results than the homemade *W2V* word embedder.
 - **RNN_w2v** (an RNN accompanied by the homemade word vectorizer) performed very well also, showing the strength of an RNN model.
-
-# Trying out the final model
-
-For an interactive usage of a simple `streamlit` app, you can clone the repo and from the terminal, run the following:
-
-```console
-pip install streamlit
-streamlit run disaster_response_streamlit.py
-```
 
 # Outline
 ### Problem
