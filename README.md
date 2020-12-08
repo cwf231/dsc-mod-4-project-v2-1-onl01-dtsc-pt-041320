@@ -20,20 +20,14 @@ streamlit run disaster_response_streamlit.py
 ```
 
 # Results
-> - Overall, **RNN_glove** (the RNN accompanied by the GloVe weights) performed clearly best overall.
- - On the test set:
-   - 87.16% of `aid-related` messages were found.
-   - 72.60% of `aid-related` predictions were correct.
-   - 79.49% overall accuracy.
-  
-  
+ 
 <img src='./images/results.PNG'>
 
 - Overall, **RNN_glove** (the RNN accompanied by the GloVe weights) performed clearly best overall.
  - On the test set:
-   - 87.16% of `aid-related` messages were found.
-   - 72.60% of `aid-related` predictions were correct.
-   - 79.49% overall accuracy.
+   - 83.82% of `aid-related` messages were found.
+   - 75.52% of `aid-related` predictions were correct.
+   - 80.55% overall accuracy.
 - **SVC_glove** (the SVC using Mean Word Embeddings and the GloVe model) performed exceptionally well, performing just below the **RNN_glove** in f1-score (better precision, but worse recall).
 - The GloVe model lead to better results than the homemade *W2V* word embedder.
 - **RNN_w2v** (an RNN accompanied by the homemade word vectorizer) performed very well also, showing the strength of an RNN model.
