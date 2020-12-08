@@ -1,6 +1,6 @@
 # Labeling Disaster-Related Messages
 
-This repo follows the processing and modeling behind a text-analysis of disaster-related messages. The texts are a combination of messages, news bulletins, etc.
+This notebook follows the processing and modeling behind a text-analysis of disaster-related messages. The texts are a combination of messages, news bulletins, etc.
 
 https://appen.com/datasets/combined-disaster-response-data/
 
@@ -18,52 +18,6 @@ For an interactive usage of a simple `streamlit` app, you can clone the repo and
 pip install streamlit
 streamlit run disaster_response_streamlit.py
 ```
-
-**Outline**
-- Data Processing
- - Understanding
- - Preparation
-   - Process text data.
-   - Process target data.
-   - Load GloVe model.
-   - Create W2V model.
- - EDA
-- Modeling
-  - scikit-learn 
-    - Naive Bayes
-    - RFC
-    - SVC
-    - LogReg
-  - TensorFlow 
-    - Mean Word Embeddings
-    - RNN
-
-***
-# Requirements
-
-This notebook utilizes the following libraries:
-```
-sys
-os
-html
-string
-PIL
-IPython
-joblib
-pandas
-numpy
-matplotlib
-seaborn
-wordcloud
-gensim
-sklearn
-nltk
-sklearn
-tensorflow
-spacy
-```
-
-Additionally, there is a `disaster_response.py` file in this repo which is used often.
 
 # Results
 > - Overall, **RNN_glove** (the RNN accompanied by the GloVe weights) performed clearly best overall.
@@ -85,10 +39,29 @@ Additionally, there is a `disaster_response.py` file in this repo which is used 
 - **RNN_w2v** (an RNN accompanied by the homemade word vectorizer) performed very well also, showing the strength of an RNN model.
 
 # Outline
+**Notebook Outline**
+- Data Processing
+ - Understanding
+ - Preparation
+   - Process text data.
+   - Process target data.
+   - Load GloVe model.
+   - Create W2V model.
+ - EDA
+- Modeling
+  - scikit-learn 
+    - Naive Bayes
+    - RFC
+    - SVC
+    - LogReg
+  - TensorFlow 
+    - Mean Word Embeddings
+    - RNN
+    
 ### Problem
 Given text data of disaster-related messages and news bulletins (English / English translation), can we correctly assign labels to the message?
 ### Objective
-Our goal is to create a model that can interpret and label a message using **Natural Language Processing**. There are **37** important labels that a message can have (for example if the message is *requesting medical help* or *offering aid*).
+Our goal is to create a model that can interpret and label a message using **Natural Language Processing**. A message can have up to 37 labels (for example if the message is requesting medical help or offering aid).
 
 In order to simplify the given dataset, I will be working only with a single label: `aid-related`.
 
@@ -105,12 +78,6 @@ In order to simplify the given dataset, I will be working only with a single lab
 
 ## Preparation
 ```
-********************************************************************************
-*                                   Success                                    *
-********************************************************************************
-Columns dropped:
-	 ['id', 'split']
-
 ********************************************************************************
 *                                 Data Shapes                                  *
 ********************************************************************************
@@ -149,43 +116,79 @@ https://nlp.stanford.edu/projects/glove/
 ********************************************************************************
 Most Similar Words:
 1.	quake
-2.	haiti
-3.	rt
-4.	tsunami
-5.	facebook
-6.	aftershocks
-7.	7.0
-8.	twitter
-9.	catastrophe
-10.	cyclone
+2.	richter
+3.	7.0
+4.	aftershock
+5.	haiti
+6.	7.3
+7.	bit.ly
+8.	catastrophe
+9.	temblor
+10.	tinyurl.com
+
+
+********************************************************************************
+*                                     HELP                                     *
+********************************************************************************
+Most Similar Words:
+1.	anything
+2.	please
+3.	u
+4.	food
+5.	need
+6.	aid
+7.	hungry
+8.	thank
+9.	something
+10.	n't
+
+
 ********************************************************************************
 *                                   VILLAGE                                    *
 ********************************************************************************
 Most Similar Words:
-1.	kachipul
-2.	ghulam
-3.	road
-4.	haidar
-5.	district
-6.	close
-7.	pahore
-8.	near
-9.	located
-10.	34th
+1.	district
+2.	sujawal
+3.	area
+4.	region
+5.	kilometer
+6.	camp
+7.	county
+8.	mountain
+9.	hamlet
+10.	pir
+
+
+********************************************************************************
+*                                    WATER                                     *
+********************************************************************************
+Most Similar Words:
+1.	drinking
+2.	clean
+3.	potable
+4.	polluted
+5.	toilet
+6.	tarp
+7.	contaminated
+8.	chlorine
+9.	latrine
+10.	food
+
+
 ********************************************************************************
 *                                    PEOPLE                                    *
 ********************************************************************************
 Most Similar Words:
-1.	persons
-2.	others
-3.	families
-4.	tens
-5.	survivors
-6.	dead
-7.	lives
-8.	wounded
-9.	residents
-10.	population
+1.	person
+2.	family
+3.	survivor
+4.	others
+5.	everyone
+6.	someone
+7.	hungry
+8.	resident
+9.	child
+10.	refuge
 ```
 
 ### EDA & Processing (continued)
@@ -197,20 +200,22 @@ Most Similar Words:
 <img src='./images/most_common_words.png'>
 <img src='./images/most_common_phrases.png'>
 
-## Modeling
+# Modeling
 
 There are two different data processing methods which will be modeled with. The models' metrics will then be compared and a final model will be selected.
 
 The processing methods are:
 - **Mean Word Embeddings**
- - There are two types of embedders we will be using - pretrained **GloVe** (Global Vectors for Word Representation - https://nlp.stanford.edu/projects/glove/) and homemade **Word2Vec** (a vectorizer trained only on the training data).
+ - There are two types of embedders we will be using:
+   1. Pretrained **GloVe** (Global Vectors for Word Representation - https://nlp.stanford.edu/projects/glove/). 
+   2. Homemade **Word2Vec** (a vectorizer trained only on the training data).
  - For each message, every word has an n-dimension representation in vector space (in our case, 100-dimension). 
    - For words that don't exist in the *GloVe* model, they are represented as a vector of zeros.
  - The mean of each sentence's words is calculated and a single n-dimensional vector is used to represent the entire message.
 - **Tokenization**
  - This is used in Recurrent Neural Networks to utilize the skill of using *ordered sequences* as they exist.
- - These models use an array representation of each word in a message (with a pretrained weights system - GloVe in this case).
- - The word-representations are learned sequentially and meanings are extrapolated from the order they appear, rather than as a conglomerate.
+ - These models use an array representation of each word in a message.
+ - The word-representations are learned sequentially and meanings are extrapolated from the order they appear, rather than as a single point.
  
 ### ML - SKLearn
 #### Mean Word Embeddings
@@ -253,3 +258,20 @@ array([[   0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
 *                                   Finished                                   *
 ********************************************************************************
 ```
+
+# Conclusion
+## Best Model
+
+- The RNN model using GloVe embeddings performed best overall.
+ - On the test set:
+   - 83.82% of `aid-related` messages were found.
+   - 75.52% of `aid-related` predictions were correct.
+   - 80.55% overall accuracy.
+   
+The Recurrent Neural Network (GRU) had the best aptitude for the problem. Its ability to interpret the word sequences proved to be very valuable.
+
+This type of model - with either a more complex topography and/or a much longer training time - would be recommended.
+   
+## For the future
+- Include the multitude of other labels to further identify the messages.
+- Experiment with more RNN architectures to try to get better results.
