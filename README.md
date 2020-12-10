@@ -32,6 +32,11 @@ streamlit run disaster_response_streamlit.py
 - The GloVe model lead to better results than the homemade *W2V* word embedder.
 - **RNN_w2v** (an RNN accompanied by the homemade word vectorizer) performed very well also, showing the strength of an RNN model.
 
+<img src='./images/time_spent.PNG'>
+
+**This model, if used in the field, would save hours of man-power.** 
+ - **With approximately 2500 messages, the model would save approximately 15 hours of time that would have been spent with a human-labeler.**
+
 # Outline
 **Notebook Outline**
 - Data Processing
@@ -261,6 +266,11 @@ array([[   0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
    - 83.82% of `aid-related` messages were found.
    - 75.52% of `aid-related` predictions were correct.
    - 80.55% overall accuracy.
+   
+**This model, if used in the field, would save hours of man-power.** 
+ - **With approximately 2500 messages, the model would save approximately 15 hours of time that would have been spent with a human-labeler.**
+
+***
    
 The Recurrent Neural Network (GRU) had the best aptitude for the problem. Its ability to interpret the word sequences proved to be very valuable.
 
