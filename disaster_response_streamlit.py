@@ -49,6 +49,7 @@ def predict_with_model(processed_data, model):
 
 
 def inference(text, tokenizer, model):
+    """Returns a verbose prediction of a given string."""
     processed_data = prepare_text_for_model(text, tokenizer)
     aid_related, y_pred = predict_with_model(processed_data, model)
     likelihood = f'(Likelihood aid-related: {round(y_pred*100, 3)}%)'
@@ -60,8 +61,8 @@ def inference(text, tokenizer, model):
 def main():
 	st.title('Disaster Response - Message Identification')
 	st.write('This app is designed to show predictions on whether a given text is likely to be `aid-related` or not. A model like this can be used to quickly label a high volume of texts during times when it is important to find messages that are labeled as important.')
-	st.write('The model being used is a Recurrent Neural Network build with Tensorflow. It uses GloVe weight embeddings and trained for only 5 epochs.')
-	st.write('On unseen text data, 83.82% of `aid-related` messages were found, 75.52%% of `aid-related` predictions were correct. The model scored an 80.55% overall accuracy.')
+	st.write('The model being used is a Recurrent Neural Network build with Tensorflow. It uses GloVe weight embeddings and trained for only 8 epochs.')
+	st.write('On unseen text data, 80.67% of `aid-related` messages were found, 80.74% of `aid-related` predictions were correct. The model scored an 82.69% overall accuracy.')
 	st.image(Image.open('./images/neuron.png'), use_column_width=True)
 	st.write('Please fill in some text into the left sidebar, then press the button below. (The messages can be any length)')
 

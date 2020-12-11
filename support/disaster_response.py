@@ -22,8 +22,6 @@ from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
 
-import kerastuner as kt
-
 import IPython
 import os
 import json
@@ -818,67 +816,67 @@ def build_model(num_words,
 	return model
 
 
-def keras_tuner_hyperband(X_train, 
-						  y_train, 
-						  X_val, 
-						  y_val, 
-						  directory, 
-						  project_name='disaster_response'):
-	def build_tuner_model(hp):
-		model = models.Sequential()
-		model.add(layers.Embedding(20_000, 128))
+# def keras_tuner_hyperband(X_train, 
+# 						  y_train, 
+# 						  X_val, 
+# 						  y_val, 
+# 						  directory, 
+# 						  project_name='disaster_response'):
+# 	def build_tuner_model(hp):
+# 		model = models.Sequential()
+# 		model.add(layers.Embedding(20_000, 128))
 
-		# Gridsearch GRU units.
-		gru_units = hp.Int('gru_units', 
-						   min_value=64, 
-						   max_value=512, 
-						   step=32)
-		model.add(layers.GRU(units=gru_units, return_sequences=True))
+# 		# Gridsearch GRU units.
+# 		gru_units = hp.Int('gru_units', 
+# 						   min_value=64, 
+# 						   max_value=512, 
+# 						   step=32)
+# 		model.add(layers.GRU(units=gru_units, return_sequences=True))
 
-		model.add(layers.GlobalMaxPool1D())
-		model.add(layers.Dropout(0.5))
+# 		model.add(layers.GlobalMaxPool1D())
+# 		model.add(layers.Dropout(0.5))
 
-		# Gridsearch number of dense units (Dense layer 1).
-		dense_units1 = hp.Int('dense_units1', 
-							  min_value=64, 
-							  max_value=512, 
-							  step=32)
-		model.add(layers.Dense(units=dense_units1, activation='relu'))
-		model.add(layers.Dropout(0.5))
-		model.add(layers.Dense(24, activation='sigmoid'))
+# 		# Gridsearch number of dense units (Dense layer 1).
+# 		dense_units1 = hp.Int('dense_units1', 
+# 							  min_value=64, 
+# 							  max_value=512, 
+# 							  step=32)
+# 		model.add(layers.Dense(units=dense_units1, activation='relu'))
+# 		model.add(layers.Dropout(0.5))
+# 		model.add(layers.Dense(24, activation='sigmoid'))
 
-		# Gridsearch learning_rate
-		hp_learning_rate = hp.Choice('learning_rate', values=[0.01, 0.001, 
-															  0.0001])
-		model.compile(loss='binary_crossentropy',
-					  optimizer=optimizers.Adam(learning_rate=hp_learning_rate),
-					  metrics=['accuracy'])
-		return model
+# 		# Gridsearch learning_rate
+# 		hp_learning_rate = hp.Choice('learning_rate', values=[0.01, 0.001, 
+# 															  0.0001])
+# 		model.compile(loss='binary_crossentropy',
+# 					  optimizer=optimizers.Adam(learning_rate=hp_learning_rate),
+# 					  metrics=['accuracy'])
+# 		return model
 
-	# Instantiate tuner with above function.
-	tuner = kt.Hyperband(build_tuner_model,
-						 objective='val_accuracy', 
-						 max_epochs=10,
-						 factor=3,
-						 directory=directory,
-						 project_name=project_name)
-	tuner.search(X_train, 
-				 y_train, 
-				 epochs=10, 
-				 validation_data=(X_val, y_val), 
-				 callbacks=[ClearTrainingOutput()])
+# 	# Instantiate tuner with above function.
+# 	tuner = kt.Hyperband(build_tuner_model,
+# 						 objective='val_accuracy', 
+# 						 max_epochs=10,
+# 						 factor=3,
+# 						 directory=directory,
+# 						 project_name=project_name)
+# 	tuner.search(X_train, 
+# 				 y_train, 
+# 				 epochs=10, 
+# 				 validation_data=(X_val, y_val), 
+# 				 callbacks=[ClearTrainingOutput()])
 
-	print(headerize('Tuning Complete'))
-	best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
-	opt_gru = best_hps.get('gru_units')
-	opt_dense1 = best_hps.get('dense_units1')
-	learning_rate = best_hps.get('learning_rate')
-	print('Optimal Settings:')
-	print(f'\tGRU UNITS           : {opt_gru}')
-	print(f'\tDENSE UNITS (LAYER): {opt_dense1}')
-	print(f'\tLEARNING RATE       : {learning_rate}')
+# 	print(headerize('Tuning Complete'))
+# 	best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
+# 	opt_gru = best_hps.get('gru_units')
+# 	opt_dense1 = best_hps.get('dense_units1')
+# 	learning_rate = best_hps.get('learning_rate')
+# 	print('Optimal Settings:')
+# 	print(f'\tGRU UNITS           : {opt_gru}')
+# 	print(f'\tDENSE UNITS (LAYER): {opt_dense1}')
+# 	print(f'\tLEARNING RATE       : {learning_rate}')
 
-	return tuner
+# 	return tuner
 
 
 class MeanEmbedder:

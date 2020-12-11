@@ -6,15 +6,16 @@ https://appen.com/datasets/combined-disaster-response-data/
 
 <img src='./images/wordcloud.png'>
 
-# Trying Out the Model
+# Using the Model
+<img src='./images/webapp.png'>
 
-## Try out the model here!
-> https://share.streamlit.io/cwf231/dsc-mod-4-project-v2-1-onl01-dtsc-pt-041320/disaster_response_streamlit.py
+## Try out the webapp here!
+https://share.streamlit.io/cwf231/dsc-mod-4-project-v2-1-onl01-dtsc-pt-041320/disaster_response_streamlit.py
 
-## Or...
-For an interactive usage of a simple `streamlit` app, you can clone the repo and from the terminal, run the following:
-
-```console
+> Or...
+> For an interactive usage of a simple `streamlit` app, you can clone the repo and from the terminal, run the following:
+> 
+>```console
 pip install streamlit
 streamlit run disaster_response_streamlit.py
 ```
@@ -25,17 +26,31 @@ streamlit run disaster_response_streamlit.py
 
 - Overall, **RNN_glove** (the RNN accompanied by the GloVe weights) performed clearly best overall.
  - On the test set:
-   - 83.82% of `aid-related` messages were found.
-   - 75.52% of `aid-related` predictions were correct.
-   - 80.55% overall accuracy.
-- **SVC_glove** (the SVC using Mean Word Embeddings and the GloVe model) performed exceptionally well, performing just below the **RNN_glove** in f1-score (better precision, but worse recall).
+   - 80.67% of `aid-related` messages were found.
+   - 80.74% of `aid-related` predictions were correct.
+   - 82.69% overall accuracy.
+- **SVC_glove** (the SVC using Mean Word Embeddings and the GloVe model) performed exceptionally well and was the best of the ML models.
 - The GloVe model lead to better results than the homemade *W2V* word embedder.
-- **RNN_w2v** (an RNN accompanied by the homemade word vectorizer) performed very well also, showing the strength of an RNN model.
+
+***
+### Model Summary
+
+The results of the modeling is mostly predictable - Neural Networks outperform machine learning models on the whole. However, it is important to note the impressive scores of the **SVC** with Mean Embeddings from the GloVe model. It was overall the third-best model. It was a very solid choice for solving this problem and surpassed many Neural Networks.
+
+You can tell that even though the Logistic Regression model had the best Recall, it was doing so by substantially over-guessing the positive class. The Precision is the lowest out of any model (including the baseline NB), so this high score should be taken with a grain of salt.
+
+As expected, the Recurrent NeuraL Network performed best (with stacked LSTM layers). With a sequential problem like this one, it makes sense that patterns that arise in the texts will be picked up and interpreted.
+
+- If the priority is overall accuracy, confidence in positive predictions, and balance (F1):
+  - The **Recurrent Neural Network** with GloVe embeddings scored significantly best: 81% of aid-related predictions were correct, and 83% of its overall predictions were correct.
+
+- If the priority is to find the most aid-related messages (at the expense of mislabeling many messages as aid-related):
+  - **Logistic Regression** with the homemade Vectorizer scored the best: finding 86% of all aid-related messages.
+
+Additionally, if used in the field would, this model would save hours of man-power. 
+ - **With approximately 2500 messages, the model would save approximately 15 hours of time that would have been spent with a human-labeler.**
 
 <img src='./images/time_spent.PNG'>
-
-**This model, if used in the field, would save hours of man-power.** 
- - **With approximately 2500 messages, the model would save approximately 15 hours of time that would have been spent with a human-labeler.**
 
 # Outline
 **Notebook Outline**
@@ -109,86 +124,8 @@ Target Columns (Y):
 ### Load in GloVe model
 https://nlp.stanford.edu/projects/glove/
 ### Create W2V model from training data
-```
-********************************************************************************
-*                                  EARTHQUAKE                                  *
-********************************************************************************
-Most Similar Words:
-1.	quake
-2.	richter
-3.	7.0
-4.	aftershock
-5.	haiti
-6.	7.3
-7.	bit.ly
-8.	catastrophe
-9.	temblor
-10.	tinyurl.com
 
-
-********************************************************************************
-*                                     HELP                                     *
-********************************************************************************
-Most Similar Words:
-1.	anything
-2.	please
-3.	u
-4.	food
-5.	need
-6.	aid
-7.	hungry
-8.	thank
-9.	something
-10.	n't
-
-
-********************************************************************************
-*                                   VILLAGE                                    *
-********************************************************************************
-Most Similar Words:
-1.	district
-2.	sujawal
-3.	area
-4.	region
-5.	kilometer
-6.	camp
-7.	county
-8.	mountain
-9.	hamlet
-10.	pir
-
-
-********************************************************************************
-*                                    WATER                                     *
-********************************************************************************
-Most Similar Words:
-1.	drinking
-2.	clean
-3.	potable
-4.	polluted
-5.	toilet
-6.	tarp
-7.	contaminated
-8.	chlorine
-9.	latrine
-10.	food
-
-
-********************************************************************************
-*                                    PEOPLE                                    *
-********************************************************************************
-Most Similar Words:
-1.	person
-2.	family
-3.	survivor
-4.	others
-5.	everyone
-6.	someone
-7.	hungry
-8.	resident
-9.	child
-10.	refuge
-```
+<img src='./images/most_similar.png'>
 
 ### EDA & Processing (continued)
 #### Message lengths
@@ -259,22 +196,31 @@ array([[   0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
 ```
 
 # Conclusion
-## Best Model
+## Recommendations: Best Model
 
-- The RNN model using GloVe embeddings performed best overall.
- - On the test set:
-   - 83.82% of `aid-related` messages were found.
-   - 75.52% of `aid-related` predictions were correct.
-   - 80.55% overall accuracy.
-   
-**This model, if used in the field, would save hours of man-power.** 
+### For use:
+- If the priority is overall accuracy, confidence in positive predictions, and balance (F1):
+  - The **Recurrent Neural Network** with GloVe embeddings scored significantly best: 81% of aid-related predictions were correct, and 83% of its overall predictions were correct.
+
+- If the priority is to find the most aid-related messages (at the expense of mislabeling many messages as aid-related):
+  - **Logistic Regression** with the homemade Vectorizer scored the best: finding 86% of all aid-related messages.
+
+Additionally, if used in the field would, this model would save hours of man-power. 
  - **With approximately 2500 messages, the model would save approximately 15 hours of time that would have been spent with a human-labeler.**
 
 ***
-   
-The Recurrent Neural Network (GRU) had the best aptitude for the problem. Its ability to interpret the word sequences proved to be very valuable.
+
+### For construction:
+
+The Recurrent Neural Network (LSTM) had the best aptitude for the problem. Its ability to interpret the word sequences proved to be very valuable.
 
 This type of model - with either a more complex topography and/or a much longer training time - would be recommended.
+
+There are some keys to the architecture that can be noted here:
+
+- Having **several LSTM layers** stacked in a row improved model performance drastically compared to only having a single layer.
+- **TimeDistributed layers followed with a Flatten layer** performed better than when the LSTM layers did not return sequential information.
+- The **three Dense layers** worked in the balance between too complex and poor performance.
    
 ## For the future
 - Include the multitude of other labels to further identify the messages.
