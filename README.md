@@ -6,16 +6,18 @@ https://appen.com/datasets/combined-disaster-response-data/
 
 <img src='./images/wordcloud.png'>
 
+
 # Using the Model
+
 <img src='./images/webapp.PNG'>
 
 ## Try out the webapp here!
 https://share.streamlit.io/cwf231/dsc-mod-4-project-v2-1-onl01-dtsc-pt-041320/disaster_response_streamlit.py
 
-> Or...
-> For an interactive usage of a simple `streamlit` app, you can clone the repo and from the terminal, run the following:
-> 
->```console
+Or...
+For an interactive usage of a simple `streamlit` app, you can clone the repo and from the terminal, run the following:
+
+```console
 pip install streamlit
 streamlit run disaster_response_streamlit.py
 ```
@@ -23,6 +25,7 @@ streamlit run disaster_response_streamlit.py
 # Results
  
 <img src='./images/results.PNG'>
+
 
 - Overall, **RNN_glove** (the RNN accompanied by the GloVe weights) performed clearly best overall.
  - On the test set:
@@ -50,7 +53,9 @@ As expected, the Recurrent NeuraL Network performed best (with stacked LSTM laye
 Additionally, if used in the field would, this model would save hours of man-power. 
  - **With approximately 2500 messages, the model would save approximately 15 hours of time that would have been spent with a human-labeler.**
 
+
 <img src='./images/time_spent.PNG'>
+
 
 # Outline
 **Notebook Outline**
@@ -108,6 +113,7 @@ Processed Test Data:
 #### Remove stop-words and punctuation
 ### Target
 #### Set `aid-related` to target column.
+
 <img src='./images/aid_related_distribution.png'>
 
 ```
@@ -127,14 +133,21 @@ https://nlp.stanford.edu/projects/glove/
 
 <img src='./images/most_similar.PNG'>
 
+
 ### EDA & Processing (continued)
 #### Message lengths
+
 <img src='./images/message_length_distribution.png'>
+
 <img src='./images/msg_count.png'>
 
+
 #### Drop training data with fewer than 4 words.
+
 <img src='./images/most_common_words.png'>
+
 <img src='./images/most_common_phrases.png'>
+
 
 # Modeling
 
