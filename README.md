@@ -54,7 +54,7 @@ Additionally, if used in the field would, this model would save hours of man-pow
  - **With approximately 2500 messages, the model would save approximately 15 hours of time that would have been spent with a human-labeler.**
 
 
-<img src='./images/time_spent.PNG'>
+<img src='./images/time_spent.png'>
 
 
 # Outline
