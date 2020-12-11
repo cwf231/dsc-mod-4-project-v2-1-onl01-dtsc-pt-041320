@@ -7,7 +7,7 @@ https://appen.com/datasets/combined-disaster-response-data/
 <img src='./images/wordcloud.png'>
 
 # Using the Model
-<img src='./images/webapp.png'>
+<img src='./images/webapp.PNG'>
 
 ## Try out the webapp here!
 https://share.streamlit.io/cwf231/dsc-mod-4-project-v2-1-onl01-dtsc-pt-041320/disaster_response_streamlit.py
@@ -125,7 +125,7 @@ Target Columns (Y):
 https://nlp.stanford.edu/projects/glove/
 ### Create W2V model from training data
 
-<img src='./images/most_similar.png'>
+<img src='./images/most_similar.PNG'>
 
 ### EDA & Processing (continued)
 #### Message lengths
